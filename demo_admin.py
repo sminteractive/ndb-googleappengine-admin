@@ -3,72 +3,51 @@ import demo_models as models
 
 
 class YouTubeUserInfoAdminListFilterByCancelled(smadmin.AdminListFilter):
+    pass
+    # def form(self):
+    #     form = smadmin.AdminListFilterFormRadio(
+    #         {'name': 'Yes', 'value': True},
+    #         {'name': 'No', 'value': False}
+    #     )
+    #     return form
 
-    def form(self):
-        form = smadmin.AdminListFilterFormRadio(
-            {'name': 'Yes', 'value': True},
-            {'name': 'No', 'value': False}
-        )
-        return form
-
-    def query(self, form):
-        radio_checked = form.get_checked()
-        query = models.YouTubeUserInfo.query(
-            models.YouTubeUserInfo.canceled == radio_checked.value
-        )
-        return query
+    # def query(self, form):
+    #     radio_checked = form.get_checked()
+    #     query = models.YouTubeUserInfo.query(
+    #         models.YouTubeUserInfo.canceled == radio_checked.value
+    #     )
+    #     return query
 
 
 class YouTubeUserInfoAdminListFilterByBinaryStatus(smadmin.AdminListFilter):
-    def form(self):
-        form = smadmin.AdminListFilterFormCheckbox(
-            # Creates a FormCheckbox object
-            {'name': 'Flow Started', 'value': 0},
-            {'name': 'Google Authenticated', 'value': 1},
-            {'name': 'Personal Info Complete', 'value': 2},
-            {'name': 'Contract Presented', 'value': 4},
-            {'name': 'Contract Signed', 'value': 16},
-            {'name': 'User Rejected', 'value': 8},
-            {'name': 'Invite Sent', 'value': 32},
-            {'name': 'Invite Accepted', 'value': 64},
-            identifier='mcn_statuses',
-            name='MCN Statuses',
-        )
-        return form
+    pass
+    # def form(self):
+    #     form = smadmin.AdminListFilterFormCheckbox(
+    #         # Creates a FormCheckbox object
+    #         {'name': 'Flow Started', 'value': 0},
+    #         {'name': 'Google Authenticated', 'value': 1},
+    #         {'name': 'Personal Info Complete', 'value': 2},
+    #         {'name': 'Contract Presented', 'value': 4},
+    #         {'name': 'Contract Signed', 'value': 16},
+    #         {'name': 'User Rejected', 'value': 8},
+    #         {'name': 'Invite Sent', 'value': 32},
+    #         {'name': 'Invite Accepted', 'value': 64},
+    #         identifier='mcn_statuses',
+    #         name='MCN Statuses',
+    #     )
+    #     return form
 
-    def query(self, form):
-        form_section = form.get_section('MCN Statuses')
-        mcn_status_value = 0
-        for checkbox in form_section:
-            if checkbox.checked:
-                mcn_status_value = mcn_status_value | checkbox.value
+    # def query(self, form):
+    #     form_section = form.get_section('MCN Statuses')
+    #     mcn_status_value = 0
+    #     for checkbox in form_section:
+    #         if checkbox.checked:
+    #             mcn_status_value = mcn_status_value | checkbox.value
 
-        query = models.YouTubeUserInfo.query(
-            models.YouTubeUserInfo.binary_statuses == mcn_status_value
-        )
-        return query
-
-
-class YouTubeUserInfoAdminSearch(smadmin.AdminListSearch):
-    placeholder = 'Search by MCN User ID or Channel Name'
-
-    def search(self, search_string):
-        results = []
-        # Lookup the youtube_user_info
-        try:
-            youtube_user_info = models.YouTubeUserInfo.get_by_id(
-                int(search_string))
-            if youtube_user_info:
-                results.append(results)
-        except:
-            pass
-        # Lookup by channel ID
-        youtube_user_info = models.YouTubeUserInfo.get_by_channel_id(
-            search_string)
-        if youtube_user_info:
-            results.append(results)
-
-        return results
+    #     query = models.YouTubeUserInfo.query(
+    #         models.YouTubeUserInfo.binary_statuses == mcn_status_value
+    #     )
+    #     return query
 
 
 # class YouTubeUserInfoAdminActionCancel(smadmin.AdminBulkAction):
@@ -118,7 +97,7 @@ class YouTubeUserInfoAdminSearch(smadmin.AdminListSearch):
 
 
 # Bind the YouTubeUserInfo model to this admin
-@smadmin.register(models.YouTubeUserInfo, models.EntityWithAncestor)
+@smadmin.register(models.YouTubeUserInfo)
 class YouTubeUserInfoAdmin(smadmin.ModelAdmin):
     # fields = (
     #     {
@@ -138,6 +117,51 @@ class YouTubeUserInfoAdmin(smadmin.ModelAdmin):
     pass
 
 
+@smadmin.register(models.EntityWithAncestor)
+class EntityWithAncestorAdmin(smadmin.ModelAdmin):
+    pass
+
+
 @smadmin.register(models.User)
 class UserAdmin(smadmin.ModelAdmin):
-    pass
+    list_display = ('key', 'first_name', 'last_name', 'email')
+    list_display_links = ('key', 'last_name')
+
+    SEARCH_MODE_DEFAULT = 'default'
+    SEARCH_MODE_FIRST_NAME = 'first_name'
+    SEARCH_MODE_LAST_NAME = 'last_name'
+    # We use a list to have control over the display order
+    search_modes = [
+        (SEARCH_MODE_DEFAULT, 'Search by ID or email'),  # custom qry w/o curs
+        (SEARCH_MODE_FIRST_NAME, 'Search by First Name'),  # query with cursor
+        (SEARCH_MODE_LAST_NAME, 'Search by Last Name'),  # query with cursor
+    ]
+
+    @classmethod
+    def search(cls, search_string, cursor, mode=None):
+        # Paginated search by first name
+        if mode == cls.SEARCH_MODE_FIRST_NAME:
+            query = cls.model.query(cls.model.first_name == search_string)
+            return query.fetch_page(50, start_cursor=cursor)
+        # Paginated search by larst name
+        elif mode == cls.SEARCH_MODE_LAST_NAME:
+            query = cls.model.query(cls.model.last_name == search_string)
+            return query.fetch_page(50, start_cursor=cursor)
+        # Default search - custom query (with potentially multiple small
+        # queries)
+        elif mode == cls.SEARCH_MODE_DEFAULT:
+            searched_entities = []
+            # Search by ID
+            try:
+                user_id = int(search_string)
+                user = cls.model.get_by_id(user_id)
+                if user is not None:
+                    searched_entities.append(user)
+            except Exception:
+                pass
+            for user in cls.model.query(cls.model.email == search_string):
+                searched_entities.append(user)
+            return searched_entities, None, False
+
+        # Default to an empty result
+        return [], None, False
